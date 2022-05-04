@@ -4,6 +4,17 @@ const handleCastErrorDB = err => {
     const message = `Invalid ${err.path}: ${err.value}.`
     return new AppError(message, 400)
 }
+const handleDuplicateFieldsDB = err => {
+    const value = err.keyValue.name
+    const message = `Duplicate field value: ${value} Please use another value`
+    return new AppError(message, 400)
+}
+
+const handleValidationErrorDB = err => {
+    const errors = Object.values(err.errors).map(el => el.message)
+    const message = `Invalid input data. ${errors.join('. ')}`
+    return new AppError(message, 400)
+}
 
 const sendErrorDev = (err, res) => {
     res.status(err.statusCode).json({
@@ -17,6 +28,7 @@ const sendErrorDev = (err, res) => {
 const sendErrorProd = (err, res) => {
     // Operational, trusted error: send message to client
     if(err.isOperational){
+        // console.log("err", err)
         res.status(err.statusCode).json({
             status: err.status,
             message: err.message
@@ -25,7 +37,7 @@ const sendErrorProd = (err, res) => {
     // Programming or other unknown error: don't leak error details
     } else {
         // 1) Log error
-        console.error('ERROR 😭', err)
+        // console.error('ERROR 😭', err.isOperational)
 
         // 3) Send generic message
         res.status(500).json({
@@ -42,13 +54,12 @@ module.exports = (err, req, res, next) => {
 
     if(process.env.NODE_ENV === 'development'){
         sendErrorDev(err, res)
-        console.log('😃')
-    } else if(process.env.NODE_ENV === 'production') {
-        let error = { ...err }
-        // console.log('test')
-        if(error.name === 'CastError') error = handleCastErrorDB(error)
-
+        
+    } else if(process.env.NODE_ENV.trim() === 'production') {
+        let error = {...err}
+        if(err.name === 'CastError') error = handleCastErrorDB(error)
+        if(error.code === 11000) error = handleDuplicateFieldsDB(error)
+        if(err.name === 'ValidationError') error = handleValidationErrorDB(error)
         sendErrorProd(error, res)
     }
-    
 }
